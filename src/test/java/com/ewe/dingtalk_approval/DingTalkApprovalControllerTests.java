@@ -5,6 +5,7 @@ import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.http.MediaType;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -15,7 +16,8 @@ import java.util.Map;
 class DingTalkApprovalControllerTests {
     private final DingTalkApprovalService service = mock(DingTalkApprovalService.class);
     private final ApprovalRecordService records = mock(ApprovalRecordService.class);
-    private final MockMvc mvc = MockMvcBuilders.standaloneSetup(new DingTalkApprovalController(service, records)).build();
+    private final DingTalkApprovalController controller = new DingTalkApprovalController(service, records);
+    private final MockMvc mvc = MockMvcBuilders.standaloneSetup(controller).build();
 
     @Test
     void getOnlyOpensPage() throws Exception {
@@ -70,10 +72,23 @@ class DingTalkApprovalControllerTests {
         var session = new MockHttpSession();
         session.setAttribute("dingtalk_user_id", "vincent-id");
         session.setAttribute("dingtalk_nick", "Vincent Wang");
-        when(records.statisticsAll()).thenReturn(Map.of("total", 0L));
-        when(records.listAll()).thenReturn(List.of());
+        when(records.statisticsForApprover("vincent-id")).thenReturn(Map.of("total", 0L));
+        when(records.listForApprover("vincent-id")).thenReturn(List.of());
         mvc.perform(get("/api/dingtalk/approvals").session(session))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.statistics.total").value(0));
+        verify(records, never()).listAll();
+    }
+
+    @Test
+    void configuredDeveloperCanViewCompanyStatistics() throws Exception {
+        ReflectionTestUtils.setField(controller, "developerUserIds", "235638251739-1704317153");
+        var session = new MockHttpSession();
+        session.setAttribute("dingtalk_user_id", "235638251739-1704317153");
+        session.setAttribute("dingtalk_nick", "jack");
+        when(records.statisticsAll()).thenReturn(Map.of("total", 0L));
+        when(records.listAll()).thenReturn(List.of());
+        mvc.perform(get("/api/dingtalk/approvals").session(session))
+                .andExpect(status().isOk());
     }
 }

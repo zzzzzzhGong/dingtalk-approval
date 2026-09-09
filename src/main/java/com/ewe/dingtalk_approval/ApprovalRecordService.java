@@ -5,6 +5,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.LinkedHashSet;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -84,6 +85,19 @@ public class ApprovalRecordService {
         return statisticsFor(listAll());
     }
 
+    public List<ApprovalRecord> listForApprover(String userId) {
+        return jdbc.sql("""
+                select r.* from approval_record r
+                where exists (select 1 from approval_participant p
+                    where p.instance_id=r.instance_id and p.user_id=:userId)
+                order by r.created_at desc
+                """).param("userId", userId).query(ApprovalRecord.class).list();
+    }
+
+    public Map<String, Long> statisticsForApprover(String userId) {
+        return statisticsFor(listForApprover(userId));
+    }
+
     public ApprovalRecord syncAsManager(String instanceId) {
         find(instanceId);
         DingTalkApprovalService.ApprovalDetail detail = dingTalk.getApprovalDetail(instanceId);
@@ -95,6 +109,17 @@ public class ApprovalRecordService {
         DingTalkApprovalService.ApprovalDetail detail = dingTalk.getApprovalDetail(instanceId);
         upsertDetail(instanceId, detail);
         return find(instanceId);
+    }
+
+    public ApprovalRecord syncAsApprover(String instanceId, String userId) {
+        DingTalkApprovalService.ApprovalDetail detail = dingTalk.getApprovalDetail(instanceId);
+        requireApprover(detail, userId);
+        upsertDetail(instanceId, detail);
+        return find(instanceId);
+    }
+
+    public ApprovalRecord importAndSyncAsApprover(String instanceId, String userId) {
+        return syncAsApprover(instanceId, userId);
     }
 
     private Map<String, Long> statisticsFor(List<ApprovalRecord> records) {
@@ -130,6 +155,29 @@ public class ApprovalRecordService {
                 .param("deptId", deptId).param("businessId", detail.businessId()).param("title", detail.title())
                 .param("status", localStatus).param("result", detail.result()).param("createdAt", created)
                 .param("finishedAt", finished).param("syncedAt", OffsetDateTime.now(ZoneOffset.UTC)).update();
+        replaceParticipants(instanceId, detail);
+    }
+
+    private void replaceParticipants(String instanceId, DingTalkApprovalService.ApprovalDetail detail) {
+        var userIds = new LinkedHashSet<String>();
+        if (detail.approverUserIds() != null) detail.approverUserIds().stream()
+                .filter(id -> id != null && !id.isBlank()).forEach(userIds::add);
+        if (detail.tasks() != null) detail.tasks().stream().filter(java.util.Objects::nonNull)
+                .map(DingTalkApprovalService.ApprovalTask::userId)
+                .filter(id -> id != null && !id.isBlank()).forEach(userIds::add);
+        jdbc.sql("delete from approval_participant where instance_id=:instanceId")
+                .param("instanceId", instanceId).update();
+        for (String userId : userIds) {
+            jdbc.sql("insert into approval_participant(instance_id,user_id) values (:instanceId,:userId)")
+                    .param("instanceId", instanceId).param("userId", userId).update();
+        }
+    }
+
+    private void requireApprover(DingTalkApprovalService.ApprovalDetail detail, String userId) {
+        boolean allowed = (detail.approverUserIds() != null && detail.approverUserIds().contains(userId))
+                || (detail.tasks() != null && detail.tasks().stream().filter(java.util.Objects::nonNull)
+                        .anyMatch(task -> userId.equals(task.userId())));
+        if (!allowed) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "你不是该审批单的审批人。");
     }
 
     static String normalize(String status, String result) {

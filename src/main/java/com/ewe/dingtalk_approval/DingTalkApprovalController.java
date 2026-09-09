@@ -24,6 +24,9 @@ public class DingTalkApprovalController {
     @Value("${dingtalk.manager-names:Vincent Wang}")
     private String managerNames = "Vincent Wang";
 
+    @Value("${dingtalk.developer-user-ids:235638251739-1704317153}")
+    private String developerUserIds = "235638251739-1704317153";
+
     public DingTalkApprovalController(DingTalkApprovalService approvalService, ApprovalRecordService recordService) {
         this.approvalService = approvalService;
         this.recordService = recordService;
@@ -50,14 +53,17 @@ public class DingTalkApprovalController {
                 }).toList();
         return Map.of("success", true, "userId", userId, "departments", departments,
                 "templates", approvalService.getVisibleProcessTemplates(userId), "csrfToken", csrfToken,
-                "canViewStatistics", isManager(session));
+                "canViewStatistics", isManager(session),
+                "nick", sessionText(session, "dingtalk_nick"),
+                "avatarUrl", sessionText(session, "dingtalk_avatar_url"));
     }
 
     @GetMapping("/api/dingtalk/session")
     public Map<String, Object> session(HttpSession session) {
         String userId = requireUser(session);
         return Map.of("success", true, "userId", userId,
-                "nick", String.valueOf(session.getAttribute("dingtalk_nick")),
+                "nick", sessionText(session, "dingtalk_nick"),
+                "avatarUrl", sessionText(session, "dingtalk_avatar_url"),
                 "canViewStatistics", isManager(session));
     }
 
@@ -78,26 +84,30 @@ public class DingTalkApprovalController {
 
     @GetMapping("/api/dingtalk/approvals")
     public Map<String, Object> approvals(HttpSession session) {
-        requireManager(session);
-        return Map.of("success", true, "statistics", recordService.statisticsAll(),
-                "approvals", recordService.listAll());
+        String userId = requireStatisticsViewer(session);
+        boolean fullAccess = isDeveloper(userId);
+        return Map.of("success", true,
+                "statistics", fullAccess ? recordService.statisticsAll() : recordService.statisticsForApprover(userId),
+                "approvals", fullAccess ? recordService.listAll() : recordService.listForApprover(userId));
     }
 
     @PostMapping("/api/dingtalk/approvals/{instanceId}/sync")
     public Map<String, Object> sync(@PathVariable String instanceId,
             @RequestHeader(value = "X-CSRF-Token", required = false) String csrfToken, HttpSession session) {
         requireCsrf(session, csrfToken);
-        requireManager(session);
-        return Map.of("success", true, "approval", recordService.syncAsManager(instanceId));
+        String userId = requireStatisticsViewer(session);
+        return Map.of("success", true, "approval", isDeveloper(userId)
+                ? recordService.syncAsManager(instanceId) : recordService.syncAsApprover(instanceId, userId));
     }
 
     @PostMapping(value = "/api/dingtalk/approvals/import", consumes = MediaType.APPLICATION_JSON_VALUE)
     public Map<String, Object> importApproval(@RequestBody ImportRequest request,
             @RequestHeader(value = "X-CSRF-Token", required = false) String csrfToken, HttpSession session) {
         requireCsrf(session, csrfToken);
-        requireManager(session);
+        String userId = requireStatisticsViewer(session);
         return Map.of("success", true,
-                "approval", recordService.importAndSyncAsManager(request.instanceId()));
+                "approval", isDeveloper(userId) ? recordService.importAndSyncAsManager(request.instanceId())
+                        : recordService.importAndSyncAsApprover(request.instanceId(), userId));
     }
 
     @GetMapping("/api/dingtalk/user/departments")
@@ -126,23 +136,34 @@ public class DingTalkApprovalController {
         }
     }
 
-    private void requireManager(HttpSession session) {
-        requireUser(session);
+    private String requireStatisticsViewer(HttpSession session) {
+        String userId = requireUser(session);
         if (!isManager(session)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "审批统计仅限 BU Head Vincent Wang 访问。");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "你没有审批统计访问权限。");
         }
+        return userId;
     }
 
     private boolean isManager(HttpSession session) {
         String userId = (String) session.getAttribute("dingtalk_user_id");
         String nick = (String) session.getAttribute("dingtalk_nick");
-        return contains(managerUserIds, userId) || contains(managerNames, nick);
+        return contains(managerUserIds, userId) || contains(developerUserIds, userId)
+                || contains(managerNames, nick);
+    }
+
+    private boolean isDeveloper(String userId) {
+        return contains(developerUserIds, userId);
     }
 
     private boolean contains(String configuredValues, String actual) {
         if (actual == null || actual.isBlank()) return false;
         return java.util.Arrays.stream(configuredValues.split(","))
                 .map(String::trim).anyMatch(actual::equals);
+    }
+
+    private String sessionText(HttpSession session, String name) {
+        Object value = session.getAttribute(name);
+        return value == null ? "" : value.toString();
     }
 
     @ExceptionHandler(ResponseStatusException.class)

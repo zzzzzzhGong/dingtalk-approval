@@ -5,20 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>发起审批</title><link rel="stylesheet" href="/approval-ui.css">
 </head>
-<body><div class="shell"><header class="topbar"><a class="brand" href="/"><span class="brand-mark"><svg viewBox="0 0 24 24" fill="none"><path d="M7 12.5l3.1 3.1L17.5 8" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span>EWE 审批中心<small>MANAGEMENT CONSOLE</small></span></a><nav class="nav"><a href="/" data-short="首页">首页</a><a href="/approval-status.html" data-short="概览" class="manager-only">审批概览</a><a class="active" href="/approval-test.html" data-short="发起">发起审批</a></nav></header>
+<body><div class="shell"><header class="topbar"><a class="brand" href="/"><span class="brand-mark"><svg viewBox="0 0 24 24" fill="none"><path d="M7 12.5l3.1 3.1L17.5 8" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span>EWE 审批中心<small>MANAGEMENT CONSOLE</small></span></a><div class="top-actions"><nav class="nav"><a href="/" data-short="首页">首页</a><a href="/approval-status.html" data-short="概览" class="manager-only">审批概览</a><a class="active" href="/approval-test.html" data-short="发起">发起审批</a></nav><div id="userProfile" class="user-profile"></div></div></header>
 <main class="container"><div class="page-head"><div><p class="eyebrow">New Request</p><h1>发起审批申请</h1><p>确认发起人及所属部门后，将申请提交至钉钉审批流程。</p></div></div>
-<div class="form-layout"><section class="panel form-card"><div class="steps"><div class="step active">身份确认</div><div class="step active">填写申请</div><div class="step">钉钉审批</div></div><h2 class="section-title">申请信息</h2><p class="section-desc">当前页面使用固定测试数据，提交后可在审批概览中跟踪结果。</p>
+<div class="form-layout"><section class="panel form-card"><div class="steps"><div class="step active">身份确认</div><div class="step active">选择审批</div><div class="step">钉钉审批</div></div><h2 class="section-title">选择审批类型</h2><p class="section-desc">以下内容来自钉钉为当前用户配置的审批可见范围。选择后在钉钉中填写并提交申请。</p>
 <div id="identity" class="identity"><div class="avatar">钉</div><div><strong>正在确认登录身份</strong><span>请稍候…</span></div></div>
-<form id="form"><div class="field"><label>你可以发起的审批</label><div id="templates" class="template-grid"><div class="template-empty">正在加载可见审批类型…</div></div><p class="field-help">列表直接使用钉钉为当前用户配置的审批可见范围。</p></div><div class="field"><label for="department">发起部门</label><select class="select" id="department" required disabled><option value="">请先加载部门</option></select></div><div class="submit-row"><button class="btn btn-primary" id="submit" type="submit" disabled>提交至钉钉审批</button><button class="btn" id="refresh" type="button">刷新身份与部门</button><a class="link-btn" href="/api/dingtalk/login" target="_blank" rel="noopener">重新扫码登录</a></div></form><div id="result" class="result-box" role="status" aria-live="polite"></div></section>
-<aside class="panel summary"><h2>本次申请摘要</h2><div class="summary-row"><span>申请类型</span><strong id="selectedTemplateName">请选择审批类型</strong></div><div class="summary-row"><span>申请金额</span><strong>¥ 100.00</strong></div><div class="summary-row"><span>申请说明</span><strong>Java API 测试</strong></div><div class="summary-row"><span>审批渠道</span><strong>钉钉审批</strong></div><p class="summary-note">提交后系统会自动生成申请单号，并持续同步钉钉中的审批进度与最终结果。</p></aside></div>
+<div id="form"><div class="field"><label for="department">本次发起部门</label><select class="select" id="department" disabled><option value="">请先加载部门</option></select><p class="field-help">如果你属于多个部门，请先选择本次申请归属的部门。</p></div><div class="field"><label>你可以发起的审批</label><div id="templates" class="template-grid"><div class="template-empty">正在加载可见审批类型…</div></div><p class="field-help">点击审批类型即可唤起钉钉客户端填写并提交。</p></div><div class="submit-row"><button class="btn" id="refresh" type="button">刷新身份与部门</button><a class="link-btn" href="/api/dingtalk/login" target="_blank" rel="noopener">重新扫码登录</a></div></div><div id="result" class="result-box" role="status" aria-live="polite"></div></section>
+</div>
 </main></div>
-<script>
+<script src="/approval-profile.js"></script><script>
 const department = document.querySelector('#department');
-const submit = document.querySelector('#submit');
 const refresh = document.querySelector('#refresh');
 const result = document.querySelector('#result');
-let csrfToken = '';
-let selectedTemplate = null;
 async function api(url, options) {
   const response = await fetch(url, {credentials: 'same-origin', ...options});
   const data = await response.json();
@@ -27,15 +24,13 @@ async function api(url, options) {
 }
 async function loadDepartments() {
   refresh.disabled = true;
-  submit.disabled = true;
   department.disabled = true;
-  csrfToken = '';
   department.replaceChildren(new Option('正在加载部门', ''));
   document.querySelector('#identity').innerHTML = '<div class="avatar">钉</div><div><strong>正在确认登录身份</strong><span>正在查询所属部门…</span></div>';
   result.textContent = '正在查询所属部门…';
   try {
     const data = await api('/api/dingtalk/approval/options');
-    csrfToken = data.csrfToken;
+    renderUserProfile(data);
     document.querySelector('#identity').innerHTML = '<div class="avatar">钉</div><div><strong>钉钉身份已确认</strong><span>用户 ID：' + esc(data.userId) + '</span></div>';
     renderTemplates(data.templates || []);
     if(data.canViewStatistics) document.querySelectorAll('.manager-only').forEach(e=>e.classList.add('allowed'));
@@ -48,7 +43,6 @@ async function loadDepartments() {
     if (data.departments.length > 1) department.add(new Option('请选择本次发起部门', ''));
     for (const item of data.departments) department.add(new Option(item.name + '（' + item.deptId + '）', item.deptId));
     department.disabled = data.departments.length === 1;
-    submit.disabled = !department.value || !selectedTemplate;
     result.textContent = data.departments.length === 1 ? '已自动选择唯一所属部门。' : '你属于多个部门，请选择本次发起部门。';
   } catch (error) {
     document.querySelector('#identity').innerHTML = '<div class="avatar">!</div><div><strong>需要登录钉钉</strong><span>完成登录后会自动返回本页面。</span></div>';
@@ -57,39 +51,26 @@ async function loadDepartments() {
   }
   finally { refresh.disabled = false; }
 }
-department.addEventListener('change', () => { submit.disabled = !department.value || !selectedTemplate; });
 function safeUrl(value){return /^(https:\/\/|dingtalk:\/\/)/i.test(value||'')?value:''}
+function dingtalkClientUrl(value){
+  const url=safeUrl(value);
+  if(!url)return '';
+  if(url.startsWith('dingtalk://'))return url;
+  return 'dingtalk://dingtalkclient/page/link?url='+encodeURIComponent(url)+'&pc_slide=false';
+}
 function renderTemplates(templates){
-  const root=document.querySelector('#templates'); root.replaceChildren(); selectedTemplate=null;
-  if(!templates.length){root.innerHTML='<div class="template-empty">当前账号没有可发起的审批，请联系钉钉管理员检查审批模板可见范围。</div>';return}
-  for(const item of templates){
-    const card=document.createElement(item.apiIntegrated?'button':'a'); card.className='template-card';
-    if(item.apiIntegrated){card.type='button';card.addEventListener('click',()=>selectTemplate(item,card))}
-    else {const url=safeUrl(item.url);if(url){card.href=url;card.target='_blank';card.rel='noopener'}else{card.setAttribute('aria-disabled','true')}}
+  const root=document.querySelector('#templates'); root.replaceChildren();
+  const available=templates.filter(item=>!item.apiIntegrated);
+  if(!available.length){root.innerHTML='<div class="template-empty">当前账号没有可发起的审批，请联系钉钉管理员检查审批模板可见范围。</div>';return}
+  for(const item of available){
+    const card=document.createElement('a'); card.className='template-card';
+    const url=dingtalkClientUrl(item.url);if(url){card.href=url;card.title='在钉钉中打开“'+item.name+'”'}else{card.setAttribute('aria-disabled','true')}
     const icon=document.createElement('span');icon.className='template-icon';icon.textContent=(item.name||'审批').slice(0,1);
     if(safeUrl(item.iconUrl)){const image=document.createElement('img');image.src=item.iconUrl;image.alt='';icon.replaceChildren(image)}
-    const copy=document.createElement('span');const name=document.createElement('strong');name.textContent=item.name;const hint=document.createElement('small');hint.textContent=item.apiIntegrated?'可在本系统填写并提交':'点击后在钉钉中填写';copy.append(name,hint);card.append(icon,copy);root.append(card);
-    if(item.apiIntegrated&&!selectedTemplate)selectTemplate(item,card)
+    const copy=document.createElement('span');const name=document.createElement('strong');name.textContent=item.name;const hint=document.createElement('small');hint.textContent='点击唤起钉钉填写';copy.append(name,hint);card.append(icon,copy);root.append(card);
   }
 }
-function selectTemplate(item,card){document.querySelectorAll('.template-card.selected').forEach(x=>x.classList.remove('selected'));card.classList.add('selected');selectedTemplate=item;document.querySelector('#selectedTemplateName').textContent=item.name;submit.disabled=!department.value}
 refresh.addEventListener('click', loadDepartments);
-document.querySelector('#form').addEventListener('submit', async event => {
-  event.preventDefault();
-  if (submit.disabled || !department.value || !selectedTemplate) return;
-  submit.disabled = true;
-  refresh.disabled = true;
-  department.disabled = true;
-  result.className='result-box'; result.textContent = '正在创建，请勿重复提交…';
-  try {
-    const data = await api('/api/dingtalk/approval/test', {
-      method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken},
-      body: JSON.stringify({deptId: department.value})
-    });
-    result.className='result-box success'; result.innerHTML = '创建成功<br>审批实例 ID：' + esc(data.instanceId) + '<br><a class="link-btn" href="/approval-status.html">前往审批概览查看进度 →</a>';
-  } catch (error) { result.className='result-box error'; result.textContent = error.message; }
-  finally { refresh.disabled = false; }
-});
 function esc(v){return String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 loadDepartments();
 </script></body></html>

@@ -225,7 +225,9 @@ public class DingTalkApprovalService {
 
     public record ApprovalDetailResponse(ApprovalDetail result, Object success) {}
 
+    public record ApprovalTask(String userId, String status, String result) {}
+
     public record ApprovalDetail(String title, String finishTime, String originatorUserId,
             String originatorDeptId, String originatorDeptName, String status, String result,
-            String businessId, String createTime) {}
+            String businessId, String createTime, List<String> approverUserIds, List<ApprovalTask> tasks) {}
 }

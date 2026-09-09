@@ -90,6 +90,7 @@ public class DingTalkLoginController {
         
         session.setAttribute("dingtalk_user_id", userId);
         session.setAttribute("dingtalk_nick", user.nick());
+        session.setAttribute("dingtalk_avatar_url", user.avatarUrl());
 
         return redirect("/approval-test.html?login=success");
     }
