@@ -9,6 +9,8 @@ import org.springframework.http.MediaType;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import java.util.List;
+import java.util.Map;
 
 class DingTalkApprovalControllerTests {
     private final DingTalkApprovalService service = mock(DingTalkApprovalService.class);
@@ -51,5 +53,27 @@ class DingTalkApprovalControllerTests {
                 .content("{\"deptId\":\"83\"}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.instanceId").value("instance-1"));
         verify(service).createTestApproval("user-a", 83L);
+    }
+
+    @Test
+    void regularEmployeeCannotViewCompanyStatistics() throws Exception {
+        var session = new MockHttpSession();
+        session.setAttribute("dingtalk_user_id", "user-a");
+        session.setAttribute("dingtalk_nick", "Regular Employee");
+        mvc.perform(get("/api/dingtalk/approvals").session(session))
+                .andExpect(status().isForbidden());
+        verifyNoInteractions(records);
+    }
+
+    @Test
+    void vincentCanViewCompanyStatistics() throws Exception {
+        var session = new MockHttpSession();
+        session.setAttribute("dingtalk_user_id", "vincent-id");
+        session.setAttribute("dingtalk_nick", "Vincent Wang");
+        when(records.statisticsAll()).thenReturn(Map.of("total", 0L));
+        when(records.listAll()).thenReturn(List.of());
+        mvc.perform(get("/api/dingtalk/approvals").session(session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.statistics.total").value(0));
     }
 }

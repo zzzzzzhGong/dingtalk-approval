@@ -71,14 +71,45 @@ public class ApprovalRecordService {
                 .param("userId", userId).query(ApprovalRecord.class).list();
     }
 
+    public List<ApprovalRecord> listAll() {
+        return jdbc.sql("select * from approval_record order by created_at desc")
+                .query(ApprovalRecord.class).list();
+    }
+
     public Map<String, Long> statistics(String userId) {
-        List<ApprovalRecord> records = list(userId);
+        return statisticsFor(list(userId));
+    }
+
+    public Map<String, Long> statisticsAll() {
+        return statisticsFor(listAll());
+    }
+
+    public ApprovalRecord syncAsManager(String instanceId) {
+        find(instanceId);
+        DingTalkApprovalService.ApprovalDetail detail = dingTalk.getApprovalDetail(instanceId);
+        upsertDetail(instanceId, detail);
+        return find(instanceId);
+    }
+
+    public ApprovalRecord importAndSyncAsManager(String instanceId) {
+        DingTalkApprovalService.ApprovalDetail detail = dingTalk.getApprovalDetail(instanceId);
+        upsertDetail(instanceId, detail);
+        return find(instanceId);
+    }
+
+    private Map<String, Long> statisticsFor(List<ApprovalRecord> records) {
         return Map.of(
                 "total", (long) records.size(),
                 "approved", count(records, "APPROVED"),
                 "rejected", count(records, "REJECTED"),
                 "running", count(records, "RUNNING"),
                 "terminated", count(records, "TERMINATED"));
+    }
+
+    private ApprovalRecord find(String instanceId) {
+        return jdbc.sql("select * from approval_record where instance_id=:instanceId")
+                .param("instanceId", instanceId).query(ApprovalRecord.class).optional()
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "未找到该审批单。"));
     }
 
     private long count(List<ApprovalRecord> records, String state) {

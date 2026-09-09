@@ -11,11 +11,18 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.beans.factory.annotation.Value;
 
 @RestController
 public class DingTalkApprovalController {
     private final DingTalkApprovalService approvalService;
     private final ApprovalRecordService recordService;
+
+    @Value("${dingtalk.manager-user-ids:}")
+    private String managerUserIds = "";
+
+    @Value("${dingtalk.manager-names:Vincent Wang}")
+    private String managerNames = "Vincent Wang";
 
     public DingTalkApprovalController(DingTalkApprovalService approvalService, ApprovalRecordService recordService) {
         this.approvalService = approvalService;
@@ -42,7 +49,16 @@ public class DingTalkApprovalController {
                     return Map.<String, Object>of("deptId", id, "name", detail.getOrDefault("name", "部门 " + id));
                 }).toList();
         return Map.of("success", true, "userId", userId, "departments", departments,
-                "templates", approvalService.getVisibleProcessTemplates(userId), "csrfToken", csrfToken);
+                "templates", approvalService.getVisibleProcessTemplates(userId), "csrfToken", csrfToken,
+                "canViewStatistics", isManager(session));
+    }
+
+    @GetMapping("/api/dingtalk/session")
+    public Map<String, Object> session(HttpSession session) {
+        String userId = requireUser(session);
+        return Map.of("success", true, "userId", userId,
+                "nick", String.valueOf(session.getAttribute("dingtalk_nick")),
+                "canViewStatistics", isManager(session));
     }
 
     @PostMapping(value = "/api/dingtalk/approval/test", consumes = MediaType.APPLICATION_JSON_VALUE)
@@ -62,24 +78,26 @@ public class DingTalkApprovalController {
 
     @GetMapping("/api/dingtalk/approvals")
     public Map<String, Object> approvals(HttpSession session) {
-        String userId = requireUser(session);
-        return Map.of("success", true, "statistics", recordService.statistics(userId),
-                "approvals", recordService.list(userId));
+        requireManager(session);
+        return Map.of("success", true, "statistics", recordService.statisticsAll(),
+                "approvals", recordService.listAll());
     }
 
     @PostMapping("/api/dingtalk/approvals/{instanceId}/sync")
     public Map<String, Object> sync(@PathVariable String instanceId,
             @RequestHeader(value = "X-CSRF-Token", required = false) String csrfToken, HttpSession session) {
         requireCsrf(session, csrfToken);
-        return Map.of("success", true, "approval", recordService.sync(instanceId, requireUser(session)));
+        requireManager(session);
+        return Map.of("success", true, "approval", recordService.syncAsManager(instanceId));
     }
 
     @PostMapping(value = "/api/dingtalk/approvals/import", consumes = MediaType.APPLICATION_JSON_VALUE)
     public Map<String, Object> importApproval(@RequestBody ImportRequest request,
             @RequestHeader(value = "X-CSRF-Token", required = false) String csrfToken, HttpSession session) {
         requireCsrf(session, csrfToken);
+        requireManager(session);
         return Map.of("success", true,
-                "approval", recordService.importAndSync(request.instanceId(), requireUser(session)));
+                "approval", recordService.importAndSyncAsManager(request.instanceId()));
     }
 
     @GetMapping("/api/dingtalk/user/departments")
@@ -106,6 +124,25 @@ public class DingTalkApprovalController {
         if (expected == null || !expected.equals(token)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "页面验证已失效，请刷新后重试。");
         }
+    }
+
+    private void requireManager(HttpSession session) {
+        requireUser(session);
+        if (!isManager(session)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "审批统计仅限 BU Head Vincent Wang 访问。");
+        }
+    }
+
+    private boolean isManager(HttpSession session) {
+        String userId = (String) session.getAttribute("dingtalk_user_id");
+        String nick = (String) session.getAttribute("dingtalk_nick");
+        return contains(managerUserIds, userId) || contains(managerNames, nick);
+    }
+
+    private boolean contains(String configuredValues, String actual) {
+        if (actual == null || actual.isBlank()) return false;
+        return java.util.Arrays.stream(configuredValues.split(","))
+                .map(String::trim).anyMatch(actual::equals);
     }
 
     @ExceptionHandler(ResponseStatusException.class)

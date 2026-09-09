@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>发起审批</title><link rel="stylesheet" href="/approval-ui.css">
 </head>
-<body><div class="shell"><header class="topbar"><a class="brand" href="/"><span class="brand-mark"><svg viewBox="0 0 24 24" fill="none"><path d="M7 12.5l3.1 3.1L17.5 8" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span>EWE 审批中心<small>MANAGEMENT CONSOLE</small></span></a><nav class="nav"><a href="/" data-short="首页">首页</a><a href="/approval-status.html" data-short="概览">审批概览</a><a class="active" href="/approval-test.html" data-short="发起">发起审批</a></nav></header>
+<body><div class="shell"><header class="topbar"><a class="brand" href="/"><span class="brand-mark"><svg viewBox="0 0 24 24" fill="none"><path d="M7 12.5l3.1 3.1L17.5 8" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span>EWE 审批中心<small>MANAGEMENT CONSOLE</small></span></a><nav class="nav"><a href="/" data-short="首页">首页</a><a href="/approval-status.html" data-short="概览" class="manager-only">审批概览</a><a class="active" href="/approval-test.html" data-short="发起">发起审批</a></nav></header>
 <main class="container"><div class="page-head"><div><p class="eyebrow">New Request</p><h1>发起审批申请</h1><p>确认发起人及所属部门后，将申请提交至钉钉审批流程。</p></div></div>
 <div class="form-layout"><section class="panel form-card"><div class="steps"><div class="step active">身份确认</div><div class="step active">填写申请</div><div class="step">钉钉审批</div></div><h2 class="section-title">申请信息</h2><p class="section-desc">当前页面使用固定测试数据，提交后可在审批概览中跟踪结果。</p>
 <div id="identity" class="identity"><div class="avatar">钉</div><div><strong>正在确认登录身份</strong><span>请稍候…</span></div></div>
@@ -38,6 +38,7 @@ async function loadDepartments() {
     csrfToken = data.csrfToken;
     document.querySelector('#identity').innerHTML = '<div class="avatar">钉</div><div><strong>钉钉身份已确认</strong><span>用户 ID：' + esc(data.userId) + '</span></div>';
     renderTemplates(data.templates || []);
+    if(data.canViewStatistics) document.querySelectorAll('.manager-only').forEach(e=>e.classList.add('allowed'));
     department.replaceChildren();
     if (!data.departments.length) {
       department.add(new Option('未查到所属部门', ''));
