@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>我的待办</title>
+<link rel="stylesheet" href="/approval-ui.css">
+</head>
+<body>
+<div class="shell">
+  <!-- 顶部导航：与其他页面保持一致，仅在权限允许时显示管理入口 -->
+  <header class="topbar">
+    <a class="brand" href="/">
+      <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none"><path d="M7 12.5l3.1 3.1L17.5 8" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      <span>EWE 审批中心<small>MANAGEMENT CONSOLE</small></span>
+    </a>
+    <div class="top-actions">
+      <nav class="nav">
+        <a href="/" data-short="首页">首页</a>
+        <a href="/approval-status.html" data-short="概览" class="manager-only">审批概览</a>
+        <a href="/approval-todo.html" data-short="待办" class="active">我的待办</a>
+        <a href="/approval-test.html" data-short="发起">发起审批</a>
+      </nav>
+      <div id="userProfile" class="user-profile"></div>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="page-head">
+      <div>
+        <p class="eyebrow">Pending Review</p>
+        <h1>我的待办</h1>
+        <p>以下审批单由钉钉指派给你处理。提交结果会实时写回钉钉审批流程，并通知发起人。</p>
+      </div>
+      <button class="btn" id="reload" type="button">刷新待办</button>
+    </div>
+
+    <!-- 未登录或无权访问时的提示条 -->
+    <div id="loginPrompt" class="login-prompt hidden">
+      <div><strong>需要登录钉钉</strong><span>登录后即可查看指派给你的审批任务。</span></div>
+      <a class="btn btn-primary" href="/api/dingtalk/login">扫码登录</a>
+    </div>
+
+    <section class="kpis" id="stats"></section>
+    <section id="todoList" class="todo-list"></section>
+    <div id="message" class="notice" role="status" aria-live="polite"></div>
+  </main>
+</div>
+<script src="/approval-profile.js"></script>
+<script src="/approval-todo.js"></script>
+</body>
+</html>

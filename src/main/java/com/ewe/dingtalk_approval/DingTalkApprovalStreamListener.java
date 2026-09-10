@@ -20,13 +20,15 @@ public class DingTalkApprovalStreamListener implements SmartLifecycle {
     private static final String APPROVAL_EVENT = "bpms_instance_change";
 
     private final ApprovalRecordService records;
+    private final ApprovalNotificationService notifications;
     private final OpenDingTalkClient client;
     private final AtomicBoolean running = new AtomicBoolean(false);
 
-    public DingTalkApprovalStreamListener(ApprovalRecordService records,
+    public DingTalkApprovalStreamListener(ApprovalRecordService records, ApprovalNotificationService notifications,
             @Value("${dingtalk.client-id}") String clientId,
             @Value("${dingtalk.client-secret}") String clientSecret) {
         this.records = records;
+        this.notifications = notifications;
         this.client = OpenDingTalkStreamClientBuilder.custom()
                 .credential(new AuthClientCredential(clientId, clientSecret))
                 .registerAllEventListener(event -> {
@@ -34,7 +36,9 @@ public class DingTalkApprovalStreamListener implements SmartLifecycle {
                     String instanceId = event.getData().getString("processInstanceId");
                     String changeType = event.getData().getString("type");
                     try {
-                        records.syncFromEvent(event.getEventId(), APPROVAL_EVENT + ":" + changeType, instanceId);
+                        ApprovalRecordService.SyncResult result = records.syncFromEvent(
+                                event.getEventId(), APPROVAL_EVENT + ":" + changeType, instanceId);
+                        notifications.notifyIfStatusChanged(result);
                         log.info("已同步钉钉审批事件，eventId={}, instanceId={}, type={}",
                                 event.getEventId(), instanceId, changeType);
                         return EventAckStatus.SUCCESS;
